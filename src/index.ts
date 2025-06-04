@@ -46,9 +46,19 @@ server.tool(
   },
   async ({ erpType, credentials, name }) => {
     try {
+      // Create clean credentials object without undefined values
+      const cleanCredentials = {
+        baseUrl: credentials.baseUrl,
+        username: credentials.username,
+        password: credentials.password,
+        ...(credentials.company !== undefined && { company: credentials.company }),
+        ...(credentials.apiKey !== undefined && { apiKey: credentials.apiKey }),
+        ...(credentials.customHeaders !== undefined && { customHeaders: credentials.customHeaders }),
+      }
+      
       await configManager.saveERPConfig(name, {
         type: erpType,
-        credentials,
+        credentials: cleanCredentials,
       })
 
       // Test the connection
@@ -120,14 +130,26 @@ server.tool(
   },
   async ({ title, description, questions, category, hasGiveaway, giveaway }) => {
     try {
-      const survey = await surveyManager.createSurvey({
+      // Transform questions to ensure options is always a string[] and never undefined
+      const transformedQuestions = questions.map(q => ({
+        ...q,
+        options: q.options || [] // Default to empty array if undefined
+      }));
+
+      const surveyConfig = {
         title,
         description,
-        questions,
+        questions: transformedQuestions,
         category,
         hasGiveaway,
-        giveaway,
-      })
+      };
+      
+      // Only add giveaway property if it exists
+      if (hasGiveaway && giveaway) {
+        Object.assign(surveyConfig, { giveaway });
+      }
+      
+      const survey = await surveyManager.createSurvey(surveyConfig);
 
       return {
         content: [
@@ -186,7 +208,19 @@ server.tool(
       if (source === "erp" && erpConfigName) {
         if (useBackgroundJob) {
           // Add background job for ERP processing
-          const jobId = await jobManager.addERPCustomersJob(erpConfigName, surveyId, { dateRange, ...filters })
+          // Create a clean filters object without undefined values
+          const cleanFilters = filters ? Object.fromEntries(
+            Object.entries(filters).filter(([_, v]) => v !== undefined)
+          ) : {};
+          
+          const jobId = await jobManager.addERPCustomersJob(
+            erpConfigName, 
+            surveyId, 
+            { 
+              ...(dateRange ? { dateRange } : {}),
+              ...cleanFilters
+            }
+          )
           
           return {
             content: [
@@ -210,7 +244,17 @@ server.tool(
           }
         } else {
           // Process immediately (for small lists)
-          const customers = await erpManager.getCustomers(erpConfigName, { dateRange, ...filters })
+          const baseFilters = { 
+            ...(dateRange ? { dateRange } : {}),
+            ...(filters || {})
+          };
+          
+          // Create a clean filters object without undefined values
+          const cleanFilters = Object.fromEntries(
+            Object.entries(baseFilters).filter(([_, v]) => v !== undefined)
+          );
+          
+          const customers = await erpManager.getCustomers(erpConfigName, cleanFilters)
           const result = await surveyManager.sendSurveyToCustomers(surveyId, customers)
           
           return {
@@ -577,7 +621,7 @@ async function main() {
 }
 
 // Only start the server if this file is being run directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
     console.error("Server error:", error)
     process.exit(1)

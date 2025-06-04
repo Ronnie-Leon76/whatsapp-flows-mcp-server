@@ -2,13 +2,13 @@
   "name": "whatsapp-flows-mcp-server",
   "version": "1.0.0",
   "description": "MCP server for WhatsApp Flows API with ERP integration and TypeScript background jobs",
-  "main": "build/index.js",
+  "main": "build/server.js",
   "type": "module",
   "bin": {
     "whatsapp-flows-mcp-server": "./build/server.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x build/server.js",
+    "build": "tsc",
     "start": "node build/server.js",
     "worker": "node build/worker.js",
     "dashboard": "node build/dashboard.js",

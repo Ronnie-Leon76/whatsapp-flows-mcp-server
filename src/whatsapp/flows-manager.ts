@@ -13,6 +13,28 @@ export interface FlowQuestion {
   options?: string[]
 }
 
+// Type definitions for API responses
+interface FlowCreateResponse {
+  id: string
+  [key: string]: any
+}
+
+interface WhatsAppError {
+  error?: {
+    message?: string
+    [key: string]: any
+  }
+  [key: string]: any
+}
+
+interface ContactValidationResponse {
+  contacts?: Array<{
+    status: string
+    [key: string]: any
+  }>
+  [key: string]: any
+}
+
 export class WhatsAppFlowsManager {
   private accessToken: string
   private phoneNumberId: string
@@ -42,11 +64,11 @@ export class WhatsAppFlowsManager {
       })
 
       if (!flowResponse.ok) {
-        const error = await flowResponse.json()
+        const error = await flowResponse.json() as WhatsAppError
         throw new Error(`Failed to create flow: ${error.error?.message || "Unknown error"}`)
       }
 
-      const flowData = await flowResponse.json()
+      const flowData = await flowResponse.json() as FlowCreateResponse
       const flowId = flowData.id
 
       // Step 2: Create flow JSON
@@ -67,7 +89,7 @@ export class WhatsAppFlowsManager {
       })
 
       if (!assetResponse.ok) {
-        const error = await assetResponse.json()
+        const error = await assetResponse.json() as WhatsAppError
         throw new Error(`Failed to upload flow asset: ${error.error?.message || "Unknown error"}`)
       }
 
@@ -125,7 +147,7 @@ export class WhatsAppFlowsManager {
       })
 
       if (!response.ok) {
-        const error = await response.json()
+        const error = await response.json() as WhatsAppError
         console.error("WhatsApp send error:", error)
         return false
       }
@@ -160,7 +182,7 @@ export class WhatsAppFlowsManager {
         return false
       }
 
-      const data = await response.json()
+      const data = await response.json() as ContactValidationResponse
       const contacts = data.contacts || []
 
       return contacts.length > 0 && contacts[0].status === "valid"

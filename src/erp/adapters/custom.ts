@@ -1,6 +1,23 @@
 import type { ERPAdapter, Customer } from "../erp-manager.js"
 import type { ERPCredentials } from "../../config/config-manager.js"
 
+// Type definitions for Custom ERP API responses
+interface CustomERPCustomer {
+  id?: string
+  customerNo?: string
+  name: string
+  phone?: string
+  phoneNumber?: string
+  email?: string
+  country?: string
+  [key: string]: any
+}
+
+interface CustomERPResponse {
+  customers?: CustomERPCustomer[]
+  [key: string]: any
+}
+
 export class CustomAdapter implements ERPAdapter {
   private credentials: ERPCredentials
 
@@ -58,14 +75,14 @@ export class CustomAdapter implements ERPAdapter {
         throw new Error(`Custom ERP API error: ${response.status} ${response.statusText}`)
       }
 
-      const data = await response.json()
+      const data = await response.json() as CustomERPResponse
 
       // Transform the response to match our Customer interface
       return (
-        data.customers?.map((customer: any) => ({
-          customerNo: customer.id || customer.customerNo,
+        data.customers?.map((customer: CustomERPCustomer) => ({
+          customerNo: customer.id || customer.customerNo || '',
           name: customer.name,
-          phoneNumber: customer.phone || customer.phoneNumber,
+          phoneNumber: customer.phone || customer.phoneNumber || '',
           email: customer.email,
           country: customer.country,
         })) || []

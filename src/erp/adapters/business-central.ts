@@ -1,6 +1,27 @@
 import type { ERPAdapter, Customer } from "../erp-manager.js"
 import type { ERPCredentials } from "../../config/config-manager.js"
 
+// Type definitions for Business Central API responses
+interface BusinessCentralInvoice {
+  No: string
+  Sell_to_Customer_No: string
+  Sell_to_Contact_No: string
+  Amount_Including_VAT: number
+  Posting_Date: string
+  [key: string]: any
+}
+
+interface BusinessCentralCustomer {
+  Phone_No: string
+  Name: string
+  [key: string]: any
+}
+
+interface BusinessCentralApiResponse<T> {
+  value: T[]
+  [key: string]: any
+}
+
 export class BusinessCentralAdapter implements ERPAdapter {
   private baseUrl: string
   private credentials: ERPCredentials
@@ -61,7 +82,7 @@ export class BusinessCentralAdapter implements ERPAdapter {
         throw new Error(`Business Central API error: ${response.status} ${response.statusText}`)
       }
 
-      const data = await response.json()
+      const data = await response.json() as BusinessCentralApiResponse<BusinessCentralInvoice>
       const invoices = data.value || []
 
       const customers: Customer[] = []
@@ -81,7 +102,7 @@ export class BusinessCentralAdapter implements ERPAdapter {
           })
 
           if (customerResponse.ok) {
-            const customerData = await customerResponse.json()
+            const customerData = await customerResponse.json() as BusinessCentralApiResponse<BusinessCentralCustomer>
             if (customerData.value && customerData.value.length > 0) {
               phoneNumber = customerData.value[0].Phone_No
             }
