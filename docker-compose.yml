@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # Redis service for job queue and caching
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp-flows-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+    networks:
+      - whatsapp-flows-network
+
+  # MCP Server
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp-flows-mcp-server
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=${WHATSAPP_BUSINESS_ACCOUNT_ID}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      - REDIS_URL=redis://redis:6379
+      - CONFIG_PATH=/app/config
+      - SURVEYS_PATH=/app/surveys
+      - BC_USERNAME=${BC_USERNAME}
+      - BC_PASSWORD=${BC_PASSWORD}
+    volumes:
+      - mcp_config:/app/config
+      - mcp_surveys:/app/surveys
+      - mcp_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp-flows-network
+    # Uncomment if you want to expose HTTP endpoint
+    # ports:
+    #   - "3000:3000"
+
+  # Background Job Workers (TypeScript)
+  job-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: whatsapp-flows-job-worker
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=${WHATSAPP_BUSINESS_ACCOUNT_ID}
+      - REDIS_URL=redis://redis:6379
+      - BC_USERNAME=${BC_USERNAME}
+      - BC_PASSWORD=${BC_PASSWORD}
+      - WORKER_CONCURRENCY=5
+    volumes:
+      - mcp_config:/app/config:ro
+      - worker_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp-flows-network
+    deploy:
+      replicas: 2  # Run 2 worker instances
+
+  # Job Queue Dashboard (Bull Board)
+  job-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: whatsapp-flows-job-dashboard
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp-flows-network
+
+  # Redis Commander (Web UI for Redis)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: whatsapp-flows-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp-flows-network
+
+volumes:
+  redis_data:
+    driver: local
+  mcp_config:
+    driver: local
+  mcp_surveys:
+    driver: local
+  mcp_logs:
+    driver: local
+  worker_logs:
+    driver: local
+
+networks:
+  whatsapp-flows-network:
+    driver: bridge

@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  # Redis service (same as production)
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp-flows-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+    networks:
+      - whatsapp-flows-network-dev
+
+  # MCP Server (development mode with hot reload)
+  mcp-server-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: whatsapp-flows-mcp-server-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=${WHATSAPP_BUSINESS_ACCOUNT_ID}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      - REDIS_URL=redis://redis:6379
+      - BC_USERNAME=${BC_USERNAME}
+      - BC_PASSWORD=${BC_PASSWORD}
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - mcp_config_dev:/app/config
+      - mcp_surveys_dev:/app/surveys
+      - mcp_logs_dev:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp-flows-network-dev
+
+  # Job Worker (development)
+  job-worker-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: whatsapp-flows-job-worker-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=${WHATSAPP_BUSINESS_ACCOUNT_ID}
+      - REDIS_URL=redis://redis:6379
+      - BC_USERNAME=${BC_USERNAME}
+      - BC_PASSWORD=${BC_PASSWORD}
+      - WORKER_CONCURRENCY=2
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - mcp_config_dev:/app/config:ro
+      - worker_logs_dev:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp-flows-network-dev
+    command: ["npm", "run", "worker:dev"]
+
+  # Job Dashboard (development)
+  job-dashboard-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: whatsapp-flows-job-dashboard-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - PORT=3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp-flows-network-dev
+    command: ["npm", "run", "dashboard:dev"]
+
+volumes:
+  redis_data_dev:
+    driver: local
+  mcp_config_dev:
+    driver: local
+  mcp_surveys_dev:
+    driver: local
+  mcp_logs_dev:
+    driver: local
+  worker_logs_dev:
+    driver: local
+
+networks:
+  whatsapp-flows-network-dev:
+    driver: bridge
